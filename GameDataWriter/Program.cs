@@ -2,6 +2,9 @@
 using System.IO;
 using System.Linq;
 
+// Special thanks to Sonic Team Junior for the SRB2 source code upon which much
+// of this is based. If this breaks for future save formats, see similarly-named
+// functions in SRB2 source code to determine what needs to be updated here.
 namespace GameDataWriter
 {
 	class SaveBuffer
@@ -106,21 +109,45 @@ namespace GameDataWriter
 	}
 	class Program
 	{
+		// The gamedata id used since SRB2 v2.2.12.
+		const UInt32 GAMEDATA_ID = 0x86E4A27C;
 		const int NUMMAPS = 1035;
 		const byte MV_MAX = 63;
 		const int MAXCONDITIONSETS = 128;
 		const int MAXEMBLEMS = 512;
-		const int MAXEXTRAEMBLEMS = 16;
-		const int MAXUNLOCKABLES = 32;
+		const UInt32 MAXEXTRAEMBLEMS_2_2_12 = 48;
+		const UInt32 MAXUNLOCKABLES_2_2_12 = 80;
 		const int MAXSCORE = 99999990;
 		const int GRADE_S = 6;
-		static UInt32 totalplaytime = 0;
+
+		// For compatibility with older saves.
+		const UInt32 GAMEDATA_ID_PRE_2_2_12 = 0xFCAFE211;
+		const UInt32 MAXEXTRAEMBLEMS_PRE_2_2_12 = 16;
+		const UInt32 MAXUNLOCKABLES_PRE_2_2_12 = 32;
+
+		static UInt32 versionID = 0;
+		// Id of mod (or vanilla) indicating what this save file belongs to.
+		// Only used by 2.2.12+ saves.
+		static UInt32 modID = 0;
+		// Only used by pre-2.2.12 saves.
+		// This is only a UInt32 (rather than a byte) so that we can easily
+		// reference it in the `variables` array (see Init function), which
+		// uses UInt32 for everything else. (C# doesn't have unions yet.)
 		static UInt32 modified = 0;
+
+		// Default these to the current vanilla limits since v2.2.12.
+		static UInt32 max_extraemblems = MAXEXTRAEMBLEMS_2_2_12;
+		static UInt32 max_unlockables = MAXUNLOCKABLES_2_2_12;
+
+		static UInt32 totalplaytime = 0;
 		static byte[] mapvisited = new byte[NUMMAPS];
 
+		// Using the larger possible values from v2.2.12+ for array length.
+		// Thus, loops for saving data should take care to comply with the limits
+		// of the gamedata version (which may be lower).
 		static byte[] emblemlocations = new byte[MAXEMBLEMS];
-		static byte[] extraemblems = new byte[MAXEXTRAEMBLEMS];
-		static byte[] unlockables = new byte[MAXUNLOCKABLES];
+		static byte[] extraemblems = new byte[MAXEXTRAEMBLEMS_2_2_12];
+		static byte[] unlockables = new byte[MAXUNLOCKABLES_2_2_12];
 		static byte[] conditionSets = new byte[MAXCONDITIONSETS];
 
 		static UInt32 timesBeaten = 0;
@@ -142,12 +169,30 @@ namespace GameDataWriter
 			SaveBuffer saveBuffer = new SaveBuffer();
 
 			// Version test
-			saveBuffer.WRITEUINT32(0xFCAFE211);
+			if (versionID == GAMEDATA_ID || versionID == GAMEDATA_ID_PRE_2_2_12)
+			{
+				saveBuffer.WRITEUINT32(GAMEDATA_ID);
+			}
+			else
+			{
+				Console.WriteLine(
+					"Unexpected version ID (logic error; this should've been caught when loading gamedata): {0}",
+					versionID
+				);
+				return;
+			}
 
 			saveBuffer.WRITEUINT32(totalplaytime);
 
-			btemp = (byte)modified;
-			saveBuffer.WRITEUINT8(btemp);
+			if (versionID == GAMEDATA_ID)
+			{
+				saveBuffer.WRITEUINT32(modID);
+			}
+			else if (versionID == GAMEDATA_ID_PRE_2_2_12)
+			{
+				btemp = (byte)modified;
+				saveBuffer.WRITEUINT8(btemp);
+			}
 
 			// TODO put another cipher on these things? meh, I don't care...
 			for (i = 0; i < NUMMAPS; i++)
@@ -162,18 +207,18 @@ namespace GameDataWriter
 				saveBuffer.WRITEUINT8(btemp);
 				i += j;
 			}
-			for (i = 0; i < MAXEXTRAEMBLEMS;)
+			for (i = 0; i < max_extraemblems;)
 			{
 				btemp = 0;
-				for (j = 0; j < 8 && j + i < MAXEXTRAEMBLEMS; ++j)
+				for (j = 0; j < 8 && j + i < max_extraemblems; ++j)
 					btemp |= (byte)(extraemblems[j + i] << j);
 				saveBuffer.WRITEUINT8(btemp);
 				i += j;
 			}
-			for (i = 0; i < MAXUNLOCKABLES;)
+			for (i = 0; i < max_unlockables;)
 			{
 				btemp = 0;
-				for (j = 0; j < 8 && j + i < MAXUNLOCKABLES; ++j)
+				for (j = 0; j < 8 && j + i < max_unlockables; ++j)
 					btemp |= (byte)(unlockables[j + i] << j);
 				saveBuffer.WRITEUINT8(btemp);
 				i += j;
@@ -253,19 +298,19 @@ namespace GameDataWriter
 		}
 		static void M_ClearSecrets()
 		{
-			Int32 i;
+			UInt32 i;
 			for (i = 0; i < mapvisited.Length; i++)
 			{
 				mapvisited[i] = 0;
 			}
 
-			for (i = 0; i < MAXEMBLEMS; ++i)
+			for (i = 0; i < emblemlocations.Length; ++i)
 				emblemlocations[i] = 0;
-			for (i = 0; i < MAXEXTRAEMBLEMS; ++i)
+			for (i = 0; i < extraemblems.Length; ++i)
 				extraemblems[i] = 0;
-			for (i = 0; i < MAXUNLOCKABLES; ++i)
+			for (i = 0; i < unlockables.Length; ++i)
 				unlockables[i] = 0;
-			for (i = 0; i < MAXCONDITIONSETS; ++i)
+			for (i = 0; i < conditionSets.Length; ++i)
 				conditionSets[i] = 0;
 
 			timesBeaten = timesBeatenWithEmeralds = timesBeatenUltimate = 0;
@@ -306,25 +351,54 @@ namespace GameDataWriter
 
 			SaveBuffer save_p = new SaveBuffer(bytes);
 			// Version check
-			if (save_p.READUINT32() != 0xFCAFE211)
+			versionID = save_p.READUINT32();
+			if (versionID != GAMEDATA_ID && versionID != GAMEDATA_ID_PRE_2_2_12)
 			{
-				Console.WriteLine("Game data is from another version of SRB2.\nDelete {0} and try again.", gamedatafilename);
+				Console.WriteLine(
+					"Game data is from an unsupported version of SRB2. Version ID: {0}",
+					versionID
+				);
+				return;
+			}
+
+			// Account for lower limits from SRB2 versions before v2.2.12.
+			if (versionID == GAMEDATA_ID_PRE_2_2_12)
+			{
+				max_extraemblems = MAXEXTRAEMBLEMS_PRE_2_2_12;
+				max_unlockables = MAXUNLOCKABLES_PRE_2_2_12;
 			}
 
 			totalplaytime = save_p.READUINT32();
 
-			modified = save_p.READUINT8();
+			if (versionID == GAMEDATA_ID_PRE_2_2_12)
+			{
+				modified = save_p.READUINT8();
 
-			// Aha! Someone's been screwing with the save file!
-			if ((modified == 1))
-				Console.WriteLine("Warning, the game data is modified. If this gamedata doesn't belong to a mod, you're screwed.");
-			else if (modified != 1 && modified != 0)
-				goto datacorrupt;
+				// Aha! Someone's been screwing with the save file!
+				if ((modified == 1))
+					Console.WriteLine("Warning, the game data is modified. If this gamedata doesn't belong to a mod, you're screwed.");
+				else if (modified != 1 && modified != 0)
+				{
+					Console.WriteLine("Unexpected value in gamedata: modified={0}", modified);
+					goto datacorrupt;
+				}
+			}
+			else
+			{
+				modID = save_p.READUINT32();
+			}
 
 			// TODO put another cipher on these things? meh, I don't care...
 			for (i = 0; i < NUMMAPS; i++)
 				if ((mapvisited[i] = save_p.READUINT8()) > MV_MAX)
+				{
+					Console.WriteLine(
+						"Unexpected value in gamedata: mapvisited[{0}]={1}",
+						i,
+						mapvisited[i]
+					);
 					goto datacorrupt;
+				}
 
 			// To save space, use one bit per collected/achieved/unlocked flag
 			for (i = 0; i < MAXEMBLEMS;)
@@ -334,17 +408,17 @@ namespace GameDataWriter
 					emblemlocations[j + i] = (byte)((rtemp >> j) & 1);
 				i += j;
 			}
-			for (i = 0; i < MAXEXTRAEMBLEMS;)
+			for (i = 0; i < max_extraemblems;)
 			{
 				rtemp = save_p.READUINT8();
-				for (j = 0; j < 8 && j + i < MAXEXTRAEMBLEMS; ++j)
+				for (j = 0; j < 8 && j + i < max_extraemblems; ++j)
 					extraemblems[j + i] = (byte)((rtemp >> j) & 1);
 				i += j;
 			}
-			for (i = 0; i < MAXUNLOCKABLES;)
+			for (i = 0; i < max_unlockables;)
 			{
 				rtemp = save_p.READUINT8();
-				for (j = 0; j < 8 && j + i < MAXUNLOCKABLES; ++j)
+				for (j = 0; j < 8 && j + i < max_unlockables; ++j)
 					unlockables[j + i] = (byte)((rtemp >> j) & 1);
 				i += j;
 			}
@@ -366,11 +440,13 @@ namespace GameDataWriter
 				recscore = save_p.READUINT32();
 				rectime = save_p.READUINT32();
 				recrings = save_p.READUINT16();
-				//save_p++; // compat
-				save_p.READUINT8();
+				save_p.READUINT8(); // compat
 
 				if (recrings > 10000 || recscore > MAXSCORE)
+				{
+					Console.WriteLine("Unexpected value in gamedata: recscore={0}", recscore);
 					goto datacorrupt;
+				}
 
 				if (mainrecords[i] == null)
 				{
@@ -406,7 +482,15 @@ namespace GameDataWriter
 					nightsrecords[i].mares[curmare].time = save_p.READUINT32();
 
 					if (nightsrecords[i].mares[curmare].grade > GRADE_S)
+					{
+						Console.WriteLine(
+							"Unexpected value in gamedata: nightsrecords[{0}].mares[{1}].grade={2}",
+							i,
+							curmare,
+							nightsrecords[i].mares[curmare].grade
+						);
 						goto datacorrupt;
+					}
 				}
 
 				nightsrecords[i].nummares = recmares;
@@ -702,11 +786,11 @@ namespace GameDataWriter
 		}
 		static void CommandSetExtraEmblem(string[] parameters)
 		{
-			TryUnlock(parameters, ref extraemblems, "extra emblem", MAXEXTRAEMBLEMS, 1);
+			TryUnlock(parameters, ref extraemblems, "extra emblem", max_extraemblems, 1);
 		}
 		static void CommandSetUnlockable(string[] parameters)
 		{
-			TryUnlock(parameters, ref unlockables, "unlockable ", MAXUNLOCKABLES, 1);
+			TryUnlock(parameters, ref unlockables, "unlockable ", max_unlockables, 1);
 		}
 		static void CommandSetConditionSet(string[] parameters)
 		{
