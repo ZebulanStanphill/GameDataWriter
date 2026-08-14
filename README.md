@@ -1,6 +1,6 @@
 # GameDataWriter for SRB2
 
-This is a tool for modifying the Sonic Robo Blast 2 `gamedata.dat` file. It should work for files last loaded in any version from v2.2.2 through v2.2.11, and possibly earlier versions as well.
+This is a tool for modifying the Sonic Robo Blast 2 `gamedata.dat` file. It should work for files last loaded in any version from v2.2 through v2.2.15, and possibly earlier versions as well.
 
 To compile, run `dotnet build -c Release` within the project root. The compiled program will be in the `bin/Release` folder.
 
